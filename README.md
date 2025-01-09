@@ -14,8 +14,9 @@ The aim of this project is to generate a TWIST panel for targeted enrichment, th
 **Performing in-solution hybdridisation**: Targeted enrichment takes place in the lab and follows the protocol available in the appendix, refered to as: TWIST PROTOCOL - TARGET ENRICHMENT, authored by Olivia Wesula Luande, Aron  X and Y.
 
 **Bioinformatic processing**: Bioinformatic assessment of targeted enrichment. The code for assembly, classification and alignments are be fond in the Snakefile at ~/analysis/*.snakefile. 
+
 	a) Assembly of reads into contigs using Trinity.
 	b) Classification of contigs using Kraken2.
-	c) Alignment of reads to NT using BLAST.
+	c) Alignment of reads to NT using BLAST. Code for plots are found in ~/analysis/*.R
 
-4) Code for plots are found in ~/analysis/*.R
+ Plotting code is found in ~/analysis/*.R
