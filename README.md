@@ -12,10 +12,10 @@ The aim of this project is to generate a TWIST panel for targeted enrichment, th
 	b) Filter probes on thermodynamic bases (GC%, Gibbs free energy, Entropy)
 	c) Filter probes on alignment to unwanted sequences (mitochondrial, chloroplast, human)
 
-***Performing in-solution hybdridisation***\n
+**Performing in-solution hybdridisation**
 2) Targeted enrichment. Targeted enrichment takes place in the lab and follows the protocol available in the appendix, refered to as: TWIST PROTOCOL - TARGET ENRICHMENT, authored by Olivia Wesula Luande, Aron  X and Y.
 
-***Bioinformatic processing***
+**Bioinformatic processing**
 3) Bioinformatic assessment of targeted enrichment. The code for assembly, classification and alignments are be fond in the Snakefile at ~/analysis/*.snakefile. 
 	a) Assembly of reads into contigs using Trinity.
 	b) Classification of contigs using Kraken2.
