@@ -1,0 +1,599 @@
+import glob
+import os
+
+# Path to wherever you've stored the fasta files you'd like to include in your database from which you generate baits.
+to_use_files = glob.glob("data/toUse/*")
+original_files = [os.path.basename(f) for f in to_use_files]  # Finds the files in the directory
+
+# Get the list of datasets from data/cleaned_data/*.fsa 
+cleaned_files = glob.glob("data/cleaned_data/*.fsa")
+datasets = [os.path.splitext(os.path.basename(f))[0] for f in cleaned_files] # Finds cleaned files
+
+rule all:
+    input:
+        # Cleaned data files that can be concatenated to a large database
+        expand("data/cleaned_data/{file}", file=original_files),
+
+        # Full database from which the baits are generated
+        "data/cleaned_data/full_database.fasta",
+
+        # Validated full database
+        "data/cleaned_data/validated_full_database.fasta",
+
+        # Syotti probes at different extents of allowed mismatches (0,10,20,40)
+        "outputs/syotti/syotti_0-baits.fna",
+        "outputs/syotti/syotti_10-baits.fna",
+        "outputs/syotti/syotti_20-baits.fna",
+        "outputs/syotti/syotti_40-baits.fna",
+
+        # Syotti kmer-counting files
+        "outputs/kmer_freq/syotti/syotti.kmc_pre",
+        "outputs/kmer_freq/syotti/syotti.kmc_suf",
+        "outputs/kmer_freq/syotti/syotti_kmers.txt",
+
+        # Dataset kmer-counting files
+        expand("outputs/kmer_freq/datasets/{dataset}_kmers.txt", dataset=datasets),
+        expand("outputs/kmer_freq/datasets/{dataset}.kmc_pre", dataset=datasets),
+        expand("outputs/kmer_freq/datasets/{dataset}.kmc_suf", dataset=datasets),
+
+        # GC% and Tm plots for the different probe sets
+        "outputs/plots/0_gc_tm_boxplot.png",
+        "outputs/plots/10_gc_tm_boxplot.png",
+        "outputs/plots/20_gc_tm_boxplot.png",
+        "outputs/plots/40_gc_tm_boxplot.png",
+
+        # Indexed Syotti probes
+        "outputs/syotti/syotti_0_DB",
+        "outputs/syotti/syotti_10_DB",
+        "outputs/syotti/syotti_20_DB",
+        "outputs/syotti/syotti_40_DB",
+
+        
+        # Indexed catch database
+        "outputs/syotti/syotti_0_DB.idx",
+        "outputs/syotti/syotti_10_DB.idx",
+        "outputs/syotti/syotti_20_DB.idx",
+        "outputs/syotti/syotti_40_DB.idx",
+
+        # Kalamari database (optional)
+        "data/kalamari/kalamari.dbtype",
+
+        # Placeholder for alignment to mitochondrial and chloroplast DNA 
+        "outputs/syotti/mtDNA_cpDNA_alignment/0/resultDB.1",
+
+        # Converting the alignment from binary to blast-format
+        "outputs/syotti/mtDNA_cpDNA_alignment/0/resultDB.m8",
+
+        # Probes that don't make the cut (align too well)
+        "outputs/syotti/mtDNA_cpDNA_alignment/0/problematic_probes.csv",
+
+        # Probes (0 allowed mismatches) after having removed problematic probes (that align too well) 
+        "outputs/syotti/filtered_syotti_0-baits.fna",
+
+        # The human genome
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/human_genome.zip",
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/ncbi_dataset",
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/uppercase_GCF_000001405.26_GRCh38_genomic.fna",
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/human_genome_DB",
+        
+        # Placeholder of the alignment of probes to the human genome
+        "outputs/syotti/human_genome_alignment/0/resultDB.1",
+        
+        # Alignment in blast-format
+        "outputs/syotti/human_genome_alignment/0/resultDB.m8",
+        
+        # Identifying probes that align too well
+        "outputs/syotti/human_genome_alignment/0/problematic_probes.csv",
+        
+        # Probes after having removed those that align too well with the human genome
+        "outputs/syotti/complete_filtered_syotti_0-baits.fna",
+
+        # GC% and melting-temp plots for the filtered probes
+        "outputs/plots/0_GC_Tm_filter_plots.png",
+
+        # Semi-filtered probes (don't be fooled by the name)
+        "outputs/syotti/COMPLETED_0_SYOTTI_PROBES.fasta",
+
+        # Gibbs free energy for all sequences
+        "outputs/syotti/self_complementary/RNAfold_output.fold",
+
+        # Probes with too low delta-G
+        "outputs/syotti/self_complementary/problematic_probes.csv",
+        
+        # Filtered probes after removing those with too low delta-G
+        "/home/abergm/bait_gen/outputs/syotti/self_complementary/final_probes",
+
+        # Comparison of probes' GC% and Tm (unfiltered, semifiltered, filtered)
+        "/home/abergm/bait_gen/outputs/plots/filter_comparison.png",
+
+        # Entropy plot
+        "outputs/plots/free_energy_histogram.png",
+
+        # kmers of final probes
+        "outputs/kmer_freq/syotti/final/syotti.kmc_pre",
+        "outputs/kmer_freq/syotti/final/syotti.kmc_suf",
+        "outputs/kmer_freq/syotti/final/syotti_kmers.txt",
+
+        # UpSet (overlap) plot
+        "/home/abergm/bait_gen/outputs/plots/syotti_upset_plot.png",
+
+        # bar chart
+        "outputs/plots/barchart_overlap.png"
+
+
+  
+#Clean datasets before merging
+rule clean_datafiles:
+    input:
+        "data/toUse/{file}"
+    output:
+        "data/cleaned_data/{file}"
+    shell:
+        """
+        set -euo pipefail
+        mkdir -p $(dirname {output})
+
+        grep -v '^$' {input} | \
+        awk '
+        BEGIN {{
+            RS=">"; ORS=""
+        }}
+        NR > 1 {{
+            # Split the record into header and sequence
+            n = split($0, lines, "\\n")
+            header = lines[1]
+            seq = ""
+            for (i = 2; i <= n; i++) {{
+                seq = seq lines[i]
+            }}
+            # Convert sequence to uppercase and remove non-ATCG characters
+            seq = toupper(seq)
+            gsub(/[^ATCG]/, "", seq)
+            # Check sequence length and duplication
+            if (length(seq) >= 120 && !seen[seq]++) {{
+                print ">" header "\\n" seq "\\n"
+            }}
+        }}
+        ' > {output}
+
+        # Check if output file was created and is not empty
+        if [ ! -s {output} ]; then
+            echo "Error: Output file {output} was not created or is empty."
+            exit 1
+        fi
+        """
+        
+# Concatenate the datasets to one large database
+rule concat_datafiles:
+    input:
+        expand("data/cleaned_data/{file}", file=original_files)
+    output:
+        "data/cleaned_data/full_database.fasta"
+    shell:
+        """
+        cat {input} > {output}
+        """
+
+# Ensure that the concatenated database doesnt contain any blank spaces or lowercase nucleotides
+rule validate_database:
+    input:
+        "data/cleaned_data/full_database.fasta"
+    output:
+        "data/cleaned_data/validated_full_database.fasta"
+    shell:
+        """
+        set -euo pipefail
+        mkdir -p $(dirname {output})
+
+        # Remove any blank lines and validate sequences
+        grep -v '^$' {input} | \
+        awk '
+        BEGIN {{
+            RS = ">"
+            ORS = ""
+        }}
+        NR > 1 {{
+            # Remove leading and trailing whitespace
+            gsub(/^\\s+|\\s+$/, "", $0)
+            if ($0 != "") {{
+                # Extract header and sequence
+                n = split($0, lines, "\\n")
+                header = lines[1]
+                seq = ""
+                for (i = 2; i <= n; i++) {{
+                    seq = seq lines[i]
+                }}
+                # Remove whitespace and non-ATCG characters
+                gsub(/[^ATCGatcg]/, "", seq)
+                seq = toupper(seq)
+                # Check if sequence length is at least 120
+                if (length(seq) >= 120) {{
+                    print ">" header "\\n" seq "\\n"
+                }}
+            }}
+        }}
+        ' > {output}
+
+        # Check if output file was created and is not empty
+        if [ ! -s {output} ]; then
+            echo "Error: Output file {output} was not created or is empty."
+            exit 1
+        fi
+        """
+
+# Run syotti to generate probes
+rule run_syotti:
+    conda:
+        "Syotti"
+    input:
+        "data/cleaned_data/validated_full_database.fasta"
+    output:
+        "outputs/syotti/syotti_{hd}-baits.fna",
+        "outputs/syotti/syotti_{hd}-cover-fractions.txt",
+        "outputs/syotti/syotti_{hd}-cover-marks.txt"
+    shell:
+        """
+        bin/syotti/bin/syotti design --bait-len 120 --hamming-distance {wildcards.hd} -s {input} -r -o outputs/syotti/syotti_{wildcards.hd}
+        """
+
+# Create GC% and Tm boxplots for syotti probes
+rule plot_gc_tm_boxplots:
+    conda:
+        "gc_tm_boxplot"
+    input:
+        syotti = "outputs/syotti/syotti_{hd}-baits.fna"
+    output:
+        "outputs/plots/{hd}_gc_tm_boxplot.png"
+    shell:
+        "Rscript bin/gc_tm_boxplot.R {input.syotti} {output}"    
+
+# Create syotti database to run against other databases
+rule create_syotti_db:
+    conda:
+        "mmseqs2"
+    input:
+        "outputs/syotti/syotti_{hd}-baits.fna"
+    output:
+        "outputs/syotti/syotti_{hd}_DB"
+    shell:
+        "mmseqs createdb {input} {output}"
+
+# Index the syotti databsae to run against other databsases
+rule index_syotti_db: 
+    conda:
+        "mmseqs2"
+    input:
+        "outputs/syotti/syotti_{hd}_DB"
+    output:
+        "outputs/syotti/syotti_{hd}_DB.idx"
+    shell:
+        "mmseqs createindex {input} outputs/syotti/tmp --search-type 3"
+
+
+# Download and index the SILVA database
+rule download_index_SILVA: 
+    conda:
+        "mmseqs2"
+    output:
+        "/home/abergm/bait_gen/data/SILVA"
+    params:
+        tmpdir="/home/abergm/bait_gen/data/SILVA/tmp"
+    shell:
+        """
+        mmseqs databases SILVA data/SILVA/SILVA {params.tmpdir}
+        """
+
+# Download and index the kalamari database
+rule download_kalamari_database:
+    conda:
+       "mmseqs2"
+    output:
+       "data/kalamari/kalamari.dbtype"
+    shell: 
+       "mmseqs databases Kalamari data/kalamari/kalamari tmp"
+
+
+
+# Download entries for chloroplasts and mitochondrial sequences to a fasta database 
+rule search_mt:  
+    conda:
+        "entrez-direct"
+    output: 
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/mitochondrial_search/mtDNA_cpDNA.fasta"
+    shell:
+        """
+        esearch -db nucleotide -query "(mitochondrial[Title] OR chloroplast[Title]) AND (bacteria[Filter] OR fungi[Filter] OR protozoa[Filter])" | efetch -format fasta > {output} 
+        """
+
+# Filter the mtDNA/cpDNA database so that the entries are at least 120bp long
+rule filter_mtDNA_cpDNA_database:
+    input:
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/mitochondrial_search/mtDNA_cpDNA.fasta"
+    output:
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/mitochondrial_search/filtered_mtDNA_cpDNA.fasta"
+    shell:
+        """
+        bash scripts/filter_mtDNA_cpDNA.sh {input} {output}
+        """
+
+
+# Index the mtDNA/cpDNA database
+rule index_mtDNA_cpDNA_database:
+    conda:
+        "mmseqs2"
+    input: 
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/mitochondrial_search/filtered_mtDNA_cpDNA.fasta"
+    output: 
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/mitochondrial_search/db/mtDNA_cpDNA_DB"
+    shell:
+        "mmseqs createdb {input} {output}"
+
+
+# Align syotti probes (0 mismatches) to the cpDNA/mtDNA database
+rule search_mtDNA_cpDNA_database:
+    conda:
+        "mmseqs2"
+    input:
+        syotti_db = "outputs/syotti/syotti_0_DB",
+        mtDNA_cpDNA_db = "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/mitochondrial_search/db/mtDNA_cpDNA_DB"
+    output:
+        "outputs/syotti/mtDNA_cpDNA_alignment/0/resultDB.1"
+    params:
+        result_path = "outputs/syotti/mtDNA_cpDNA_alignment/0/resultDB",
+        tmp_path = "outputs/syotti/mtDNA_cpDNA_alignment/0/tmp"
+    shell:
+        "mmseqs search {input.syotti_db} {input.mtDNA_cpDNA_db} {params.result_path} {params.tmp_path} --search-type 3 -s 7.0"
+        
+
+
+# Convert the alignment to blast format and make it easy to parse
+rule convert_mtDNA_cpDNA_alignment_to_blast_format:
+    conda:
+        "mmseqs2"
+    input:
+        queryDB="outputs/syotti/syotti_0_DB",
+        targetDB="/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/mitochondrial_search/db/mtDNA_cpDNA_DB",
+        resultDB="outputs/syotti/mtDNA_cpDNA_alignment/0/resultDB.1"
+    output:
+        "outputs/syotti/mtDNA_cpDNA_alignment/0/resultDB.m8"
+    params:
+        db_prefix="outputs/syotti/mtDNA_cpDNA_alignment/0/resultDB"
+    shell:
+        "mmseqs convertalis {input.queryDB} {input.targetDB} {params.db_prefix} {output} --format-output 'query,target,bits,pident,fident,nident'"
+
+
+# Parse the blast-format alignment file, identify probes that align to mtDNA/cpDNA with identity > 0.5
+rule identify_problematic_probes:
+    input:
+        "outputs/syotti/mtDNA_cpDNA_alignment/0/resultDB.m8"
+    output:
+        "outputs/syotti/mtDNA_cpDNA_alignment/0/problematic_probes.csv"
+    shell:
+        "python3 scripts/filter_problematic_probes.py {input} {output}"
+
+
+# Remove the probes that align with >0.5 identity
+rule remove_problematic_probes:
+    input:
+        baits = "outputs/syotti/syotti_0-baits.fna",
+        problematic_baits = "outputs/syotti/mtDNA_cpDNA_alignment/0/problematic_probes.csv"
+    output:
+        "outputs/syotti/filtered_syotti_0-baits.fna"
+    shell:
+        "python3 scripts/remove_problematic_probes.py {input.baits} {input.problematic_baits} {output}"
+
+
+# Download the human genome (GRCh38)
+rule download_human_genome: 
+    output:
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/human_genome.zip"
+    shell:
+        """
+        wget -O /mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/human_genome.zip "https://api.ncbi.nlm.nih.gov/datasets/v2alpha/genome/accession/GCF_000001405.26/download?include_annotation_type=GENOME_FASTA&include_annotation_type=GENOME_GFF&include_annotation_type=RNA_FASTA&include_annotation_type=CDS_FASTA&include_annotation_type=PROT_FASTA&include_annotation_type=SEQUENCE_REPORT&hydrated=FULLY_HYDRATED"
+        """
+
+# Unzip the human genome 
+rule unzip_human_genome:
+    input: 
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/human_genome.zip"
+    output:
+        directory("/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/ncbi_dataset")
+    shell:
+        "unzip {input}"
+
+
+# Ensure uppercase database
+rule process_human_genome: 
+    input: 
+        req = "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/ncbi_dataset",
+        hum_genome = "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/ncbi_dataset/data/GCF_000001405.26/GCF_000001405.26_GRCh38_genomic.fna"
+    output: 
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/uppercase_GCF_000001405.26_GRCh38_genomic.fna"
+    shell: 
+        """ 
+        cat {input.hum_genome} | tr "[atcg]" "[ATCG]" > {output}
+        """
+
+# Index the human genome for alignment
+rule index_human_genome: 
+    conda:
+        "mmseqs2"
+    input:
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/uppercase_GCF_000001405.26_GRCh38_genomic.fna"
+    output:
+        "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/human_genome_DB"
+    shell:
+        "mmseqs createdb {input} {output}"
+
+
+# Align syotti probes to the human genome
+rule search_human_genome:
+    conda:
+        "mmseqs2"
+    input:
+        syotti_db = "outputs/syotti/syotti_0_DB",
+        human_genome = "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/human_genome_DB"
+
+    output:
+        "outputs/syotti/human_genome_alignment/0/resultDB.1"
+    params:
+        result_path = "outputs/syotti/human_genome_alignment/0/resultDB",
+        tmp_path = "outputs/syotti/human_genome_alignment/0/tmp"
+    shell:
+        "mmseqs search {input.syotti_db} {input.human_genome} {params.result_path} {params.tmp_path} --search-type 3 -s 7.0"
+
+
+# Convert alignment to blast format for easy parsing
+rule convert_human_alignment_to_blast_format:
+    conda:
+        "mmseqs2"
+    input:
+       queryDB = "outputs/syotti/syotti_0_DB",
+       targetDB = "/mnt/autofs/shared/storage01/users/exjobb/abergm/bait_gen/human_genome_search/human_genome_DB",
+    output:
+       "outputs/syotti/human_genome_alignment/0/resultDB.m8"
+    params:
+        db_prefix="outputs/syotti/human_genome_alignment/0/resultDB"
+    shell:
+        """
+        mmseqs convertalis {input.queryDB} {input.targetDB} {params.db_prefix} {output} --format-output "query,target,bits,pident,fident,nident"
+        """   
+
+# Identify probes that align with >0.8 identity
+rule identify_human_problematic_probes:
+    input:
+        "outputs/syotti/human_genome_alignment/0/resultDB.m8"
+    output:
+        "outputs/syotti/human_genome_alignment/0/problematic_probes.csv"
+    shell:
+        "python3 scripts/filter_problematic_probes.py {input} {output}"
+
+# Remove probes that align to human genome with >0.8 identity
+rule remove_human_problematic_probes: 
+    input:
+        baits = "outputs/syotti/filtered_syotti_0-baits.fna",
+        problematic_baits = "outputs/syotti/human_genome_alignment/problematic_probes.csv"
+    output:
+        "outputs/syotti/complete_filtered_syotti_0-baits.fna"
+    shell:
+        "python3 scripts/remove_problematic_probes.py {input.baits} {input.problematic_baits} {output}"
+       
+# Filter based on GC%
+rule filter_gc:
+    conda:
+        "filter_gc"
+    input:
+        baits = "outputs/syotti/complete_filtered_syotti_0-baits.fna"
+    output:
+        plot = "outputs/plots/0_GC_Tm_filter_plots.png",
+        probes = "outputs/syotti/COMPLETED_0_SYOTTI_PROBES.fasta"
+    shell:
+        "Rscript bin/filter_gc.R {input.baits} 0"
+
+# Find delta-G for probes
+rule find_self_complementarity: 
+    conda:
+        "viennarna"
+    input:
+        "cdCOMPLETED_0_SYOTTI_PROBES.fasta"
+    output:
+        "outputs/syotti/self_complementary/RNAfold_output.fold"
+    params:
+        "outputs/syotti/self_complementary"
+    shell:
+        """
+        mkdir -p {params}
+        cd {params}
+        RNAfold --infile={input} --outfile=RNAfold_output.fold --jobs=16
+        """
+
+# Find delta-G <= -45
+rule find_problematic_free_energy:
+    conda:
+        "filter_free_energy"
+    input:
+        "outputs/syotti/self_complementary/RNAfold_output.fold"
+    output:
+        probes = "outputs/syotti/self_complementary/problematic_probes.csv",
+        plot = "outputs/plots/free_energy_histogram.png"
+    shell:
+        """
+        Rscript bin/filter_free_energy.R {input} {output.probes} {output.plot}
+        """
+
+# Remove delta-G <= -45
+rule remove_problematic_free_energy:
+    conda:
+        "filter_gc" # This en has the required packages already
+    input:
+        problematic_probes = "outputs/syotti/self_complementary/problematic_probes.csv",
+        probes = "/home/abergm/bait_gen/outputs/syotti/COMPLETED_0_SYOTTI_PROBES.fasta",
+    output:
+        "/home/abergm/bait_gen/outputs/syotti/self_complementary/final_probes"
+    shell:
+        """
+        Rscript bin/remove_self_compl.R {input.probes} {input.problematic_probes} {output}
+        """
+
+# Plot the difference in GC% and Tm between unfiltered, semi-filtered and filtered probes
+rule plot_probe_diff:
+    conda:
+        "filter_gc"
+    input:
+        original_probes = "/home/abergm/bait_gen/outputs/syotti/syotti_0-baits.fna",
+        filtered_probes = "/home/abergm/bait_gen/outputs/syotti/self_complementary/final_probes",
+        semifiltered_probes = "/home/abergm/bait_gen/outputs/syotti/COMPLETED_0_SYOTTI_PROBES.fasta"
+    output:
+        "/home/abergm/bait_gen/outputs/plots/filter_comparison.png"
+    shell:
+        """
+        Rscript bin/probe_filter_comparison.R {input.original_probes} {input.filtered_probes} {input.semifiltered_probes} {output}
+        """
+
+# Count probe kmers
+rule count_syotti_kmers:
+    conda:
+        "kmc"
+    input:
+        "outputs/syotti/self_complementary/final_probes"
+    output:
+        kmc_pre = "outputs/kmer_freq/syotti/final/syotti.kmc_pre",
+        kmc_suf = "outputs/kmer_freq/syotti/final/syotti.kmc_suf",
+        kmers_txt = "outputs/kmer_freq/syotti/final/syotti_kmers.txt"
+    params:
+        tmp_dir = "outputs/kmer_freq/syotti/final/tmp"
+    shell:
+        """
+        mkdir -p {params.tmp_dir}
+        kmc -k120 -fa -ci1 {input} outputs/kmer_freq/syotti/final/syotti {params.tmp_dir}
+        kmc_tools transform outputs/kmer_freq/syotti/final/syotti dump {output.kmers_txt}
+        """
+
+# UpSet (overlap) plot of probes
+rule plot_upset_syotti:
+    conda:
+        "kmer_overlap"
+    input: 
+        "outputs/kmer_freq/syotti/final/syotti_kmers.txt",    
+    output:
+        plot = "/home/abergm/bait_gen/outputs/plots/syotti_upset_plot.png",
+        table = "outputs/tables/kmer_overlap_post_filtering.tsv"
+    params:
+        table_dir = "outputs/tables"
+    shell:
+        """
+        mkdir -p {params.table_dir}
+        Rscript bin/plot_syotti_kmer_overlap.R {output.table}
+        """
+# Plot bar chart of database overlap of probes
+rule generate_overlap_barchart:
+    conda:
+        "kmer_overlap"
+    input:
+        table = "outputs/tables/kmer_overlap_post_filtering.tsv"
+    output:
+        plot = "outputs/plots/barchart_overlap.png"
+    shell:
+        "Rscript bin/generate_overlap_plot.R {input.table} {output.plot}"
+
+
