@@ -6,29 +6,30 @@ args <- commandArgs(trailingOnly = TRUE)
 output_file <- args[2]
 syotti_probes <- args[1]
 
+# Load probes
 syotti_probes <- readDNAStringSet(syotti_probes, format = "fasta")
-#catch_probes <- readDNAStringSet(catch_probes, format = "fasta")
 
+# Get nucleotide freqs
 syotti_nt <- data.frame(alphabetFrequency(syotti_probes))
-#catch_nt <- data.frame(alphabetFrequency(catch_probes))
 
 syotti_nt["Source"] <- rep("syotti_probes", nrow(syotti_nt))
-#catch_nt["Source"] <- rep("catch_probes", nrow(catch_nt))
 
-#total_freqs <- rbind(syotti_nt, catch_nt)
 total_freqs <- syotti_nt
 
 total_freqs <- total_freqs[, c("A", "T", "C", "G", "Source")]
 
+# calculate GC
 total_freqs$GC <- (total_freqs$G + total_freqs$C) / rowSums(total_freqs[, c("A", "T", "C", "G")])
 
+# calculate Tm
 total_freqs$Tm <- 64.9 + 41 * (total_freqs$G + total_freqs$C - 16.4) / rowSums(total_freqs[, c("A", "T", "C", "G")])
 
+# long format 
 long_freqs <- pivot_longer(total_freqs, cols = -Source, names_to = "Metric", values_to = "Value")
 
 Tm_gc <- long_freqs %>% filter(Metric %in% c("GC", "Tm"))
 
-# Corrected summarization
+# Summarize GC, Tm
 sum <- Tm_gc %>%
   group_by(Source, Metric) %>%
   summarize(
@@ -41,7 +42,7 @@ sum <- Tm_gc %>%
 sum <- sum %>%
   mutate(y_pos = max + (max - min) * 0.05)
 
-# Updated plotting code
+# Plot GC/Tm
 p <- ggplot(Tm_gc, aes(x = Source, y = Value)) +
   geom_boxplot() +
   stat_summary(fun = mean, geom = "point", shape = 20, size = 3, color = "red") +
