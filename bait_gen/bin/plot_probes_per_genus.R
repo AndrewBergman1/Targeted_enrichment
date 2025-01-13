@@ -1,4 +1,3 @@
-# Load necessary libraries
 library(tidyverse)
 
 
@@ -11,7 +10,7 @@ catch_probes <- args[1]
 catch <- read_delim(catch_probes, delim = "\t",  # Adjust delimiter as needed
                     col_names = c("Query", "Target", "taxlineage", "Taxa_Lineage", "bits"))
 
-# Summarize the data
+# Summarize data
 sum <- catch %>% 
   mutate(Genus = word(Taxa, 1, sep = " ")) %>% 
   group_by(Genus) %>% 
