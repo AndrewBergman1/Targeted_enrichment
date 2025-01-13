@@ -7,9 +7,10 @@ if len(sys.argv) < 3:
 resultDB = sys.argv[1]
 problematic_probes_file = sys.argv[2]
 
-threshold = 0.8 
+threshold = 0.8 # identity cannot exceed this
 problematic_probes = set()
 
+# find and remove identity > 0.8
 try:
     with open(resultDB, "r") as file:
         for line in file:
