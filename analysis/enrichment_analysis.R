@@ -122,76 +122,66 @@ calculate_unique_hits <- function(data, sample_metadata) {
     select(sample_id, Sample_Name, sample_type, unique_hits)
 }
 
+# Function to calculate plasmid hits per sample
 calculate_plasmid_hit_prevalence <- function(data, sample_metadata) {
   result <- data %>%
-    # Filter rows where V17 contains "plasmid" or "vector" (case-insensitive)
+    # Filter rows where V17 contains "plasmid"/"vector"
     filter(str_detect(V17, regex("plasmid|vector", ignore_case = TRUE))) %>%
-    
-    # Group by sample_id and sample_type
+  
     group_by(sample_id, sample_type, V17) %>%
     
-    # Count occurrences of each V17 within the groups
     summarise(n = n(), .groups = "drop") %>%
     
-    # Rename sample_id to sample for consistency
     rename(sample = sample_id) %>%
     
     # Join with the sample metadata to get Sample_Name and other details
     left_join(sample_metadata, by = c("sample" = "ID", "sample_type" = "sample_type")) %>%
     
-    # Select and arrange the desired columns
     select(V17, sample, Sample_Name, n)
   
   return(result)
 }
 
+# Calculate non-plasmid hits 
 calculate_non_plasmid_hit_prevalence <- function(data, sample_metadata) {
   result <- data %>%
-    # Filter rows where V17 does NOT contain "plasmid" or "vector" (case-insensitive)
+    # Filter rows where V17 does NOT contain "plasmid" or "vector"
     filter(!str_detect(V17, regex("plasmid|vector|res|resistance|antibiotic|arg|ARG", ignore_case = TRUE))) %>%
-    
-    # Group by sample_id, sample_type, and V17
     group_by(sample_id, sample_type, V17) %>%
     
-    # Count the number of occurrences for each V17 within the groups
     summarise(n = n(), .groups = "drop") %>%
     
-    # Rename sample_id to sample to match sample_metadata
     rename(sample = sample_id) %>%
     
     # Join with the sample metadata to get Sample_Name and other details
     left_join(sample_metadata, by = c("sample" = "ID", "sample_type" = "sample_type")) %>%
     
-    # Select and arrange the desired columns
     select(V17, sample, Sample_Name, n)
   
   return(result)
 }
 
+# Calculate the fraction of ARG/plasmid hits 
 calculate_fraction_hits <- function(hits_df, plasmid_df, non_plasmid_df, arg_hits_df, sample_metadata) {
   hits_df %>%
-    # Join plasmid_hits by matching sample_id in hits_df to sample in plasmid_df
     left_join(
       plasmid_df %>% 
         group_by(sample) %>% 
         summarise(plasmid_hits = sum(n, na.rm = TRUE), .groups = "drop"),
       by = c("sample_id" = "sample")
     ) %>%
-    # Join non_plasmid_hits similarly
     left_join(
       non_plasmid_df %>% 
         group_by(sample) %>% 
         summarise(non_plasmid_hits = sum(n, na.rm = TRUE), .groups = "drop"),
       by = c("sample_id" = "sample")
     ) %>%
-    # Join arg_hits similarly
     left_join(
       arg_hits_df %>% 
         group_by(sample) %>% 
         summarise(arg_hits = sum(n, na.rm = TRUE), .groups = "drop"),
       by = c("sample_id" = "sample")
     ) %>% 
-    # Join with sample_metadata to get Sample_Name and sample_type
     left_join(
       sample_metadata, 
       by = c("sample_id" = "ID", "sample_type" = "sample_type")
@@ -202,11 +192,11 @@ calculate_fraction_hits <- function(hits_df, plasmid_df, non_plasmid_df, arg_hit
       frac_non_plasmids = non_plasmid_hits / hits,
       frac_args = arg_hits / hits
     ) %>%
-    # Select and arrange desired columns
     select(sample_id, Sample_Name.x, sample_type, frac_plasmids, frac_non_plasmids, frac_args, arg_hits, plasmid_hits, non_plasmid_hits) %>% 
     rename(Sample_Name=Sample_Name.x)
 }
-# Function to calculate isoform statistics
+
+# calculate isoform statistics
 calculate_isoform_statistics <- function(data) {
   data %>%
     mutate(
@@ -226,6 +216,7 @@ calculate_isoform_statistics <- function(data) {
     )
 }
 
+# Plot the plasmid/ARG fractions
 plot_plasmid_fraction <- function(frac_df, fecal = F) {
   
   if (fecal == T) {
@@ -298,12 +289,14 @@ plot_plasmid_fraction <- function(frac_df, fecal = F) {
   print(p)
 }
 
+# Add DNA data to the frac_df
 add_dna_data <- function(frac_df, values) {
   frac_df <- frac_df %>% 
     mutate(post_enr_c = values)
 }
 
 
+# Calculate the representation of unique plasmids/ARGs per sample
 calculate_plasmid_coverage <- function(plasmid_hit_prevalence,
                                        non_plasmid_hit_prevalence,
                                        arg_hit_prevalence,
@@ -313,7 +306,7 @@ calculate_plasmid_coverage <- function(plasmid_hit_prevalence,
                                        fecal = FALSE,
                                        custom_order = NULL) {
   
-  # Define sample order based on 'fecal' flag or use 'custom_order' if provided
+  # If sample order is provided, use it
   if (fecal) {
     default_order <- c(
       "6323_1x(1)", "6323_1x(2)", "10e-1ng_enriched", 
@@ -325,43 +318,43 @@ calculate_plasmid_coverage <- function(plasmid_hit_prevalence,
     # sample_data <- sample_data %>% filter(Sample_Name != "25ng_control") # if needed
   }
   
-  # Use custom_order if provided, else use default_order
+  # If sample order is provided, use it
   order <- if (!is.null(custom_order)) custom_order else default_order
   
   # Replace NA values in frac_df with 0
   frac_df[is.na(frac_df)] <- 0
   
-  # Calculate total unique plasmids
+  # total unique plasmids
   total_unique_plasmids <- plasmid_hit_prevalence %>%
     distinct(V17) %>%
     nrow()
   
-  # Calculate total unique non-plasmids
+  # total unique non-plasmids
   total_unique_non_plasmids <- non_plasmid_hit_prevalence %>%
     distinct(V17) %>%
     nrow()
   
-  # Calculate total unique ARGs
+  # total unique ARGs
   total_unique_args <- arg_hit_prevalence %>%
     distinct(V17) %>%
     nrow()
   
-  # Summarize unique plasmid hits per sample
+  # unique plasmid hits per sample
   n_unique_plasmid_hits <- plasmid_hit_prevalence %>%
     group_by(Sample_Name) %>%
     summarize(n_unique_plasmids = n_distinct(V17), .groups = 'drop')
   
-  # Summarize unique non-plasmid hits per sample
+  # unique non-plasmid hits per sample
   n_unique_non_plasmid_hits <- non_plasmid_hit_prevalence %>%
     group_by(Sample_Name) %>%
     summarize(n_unique_non_plasmids = n_distinct(V17), .groups = 'drop')
   
-  # Summarize unique ARG hits per sample
+  # unique ARG hits per sample
   n_unique_arg_hits <- arg_hit_prevalence %>%
     group_by(Sample_Name) %>%
     summarize(n_unique_args = n_distinct(V17), .groups = 'drop')
   
-  # Merge all metrics into a unified data frame
+  # Merge metrics
   unique_df <- frac_df %>%
     left_join(hits_per_sample, by = "Sample_Name") %>%
     left_join(n_unique_plasmid_hits, by = "Sample_Name") %>%
@@ -380,20 +373,15 @@ calculate_plasmid_coverage <- function(plasmid_hit_prevalence,
         n_unique_non_plasmids = 0
       )
     ) %>%
-    # Rename for consistency
     rename(sample = Sample_Name) %>%
-    # Convert 'sample' to a factor with levels defined by 'order'
     mutate(sample = factor(sample, levels = order)) %>%
-    # Arrange based on the factor levels
     arrange(sample) %>%
-    # Calculate fraction plasmid coverage and fraction ARG coverage
     mutate(
       frac_plasmid_coverage = n_unique_plasmids / total_unique_plasmids,
       frac_arg_coverage = n_unique_args / total_unique_args
     )
-  
-  # ----- Transform data to long format -----
-  # In this example, we compare fraction plasmid coverage vs fraction ARG coverage side by side
+
+  # convert frac_df to long-foramt
   coverage_long <- unique_df %>%
     select(sample, frac_plasmid_coverage, frac_arg_coverage) %>%
     tidyr::pivot_longer(
@@ -401,8 +389,8 @@ calculate_plasmid_coverage <- function(plasmid_hit_prevalence,
       names_to = "coverage_type",
       values_to = "coverage_value"
     )
-  
-  # ----- Grouped Bar Plot: Plasmid vs. ARG coverage -----
+
+  # Bar plot
   p_coverage <- ggplot(coverage_long, aes(x = sample, y = coverage_value, fill = coverage_type)) +
     geom_col(position = position_dodge(width = 0.9)) +
     scale_fill_manual(
@@ -431,76 +419,89 @@ calculate_plasmid_coverage <- function(plasmid_hit_prevalence,
   return(unique_df)
 }
 
-
+# Calculate the unique arg coverage per sample
 calculate_arg_hit_prevalence <- function(data, sample_metadata) {
   result <- data %>%
-    # Filter rows where V17 does NOT contain "plasmid" or "vector" (case-insensitive)
     filter(str_detect(V17, regex("res|resistance|antibiotic|arg", ignore_case = TRUE))) %>%
     
-    # Group by sample_id, sample_type, and V17
     group_by(sample_id, sample_type, V17) %>%
     
-    # Count the number of occurrences for each V17 within the groups
+    # Count the number of occurrences 
     summarise(n = n(), .groups = "drop") %>%
     
-    # Rename sample_id to sample to match sample_metadata
+    # Rename sample_id to sample to match metadata
     rename(sample = sample_id) %>%
     
-    # Join with the sample metadata to get Sample_Name and other details
+    # Join metadata w/ sample data
     left_join(sample_metadata, by = c("sample" = "ID", "sample_type" = "sample_type")) %>%
     
-    # Select and arrange the desired columns
     select(V17, sample, Sample_Name, n)
   
   return(result)
 }
 
 #------------#
-# FECAL DATA
+# CALCULATIONS FRO FECAL DATA
 #------------#
 
+# Get samples
 fecal_data <- all_samples %>% filter(sample_type == "fecal")
+# Get metadata
 fecal_metadata <- all_sample_data %>% filter(sample_type == "fecal")
+# Add post-enrichment DNA concentrations
 fecal_dna_values <- c(1.34, 1.36, 1.58, 1.22, 0.846, 0.542, 0.486, 0.418)
 
+# Calculate the number of hits per samples
 hits_per_fecal_sample <- calculate_hits_per_sample(fecal_data, fecal_metadata)
+# Calculate the unique hits per sample
 unique_hits_fecal <- calculate_unique_hits(fecal_data, fecal_metadata)
+# Calculate the representation of unique plasmids throughout the samples
 plasmid_hit_prevalence <- calculate_plasmid_hit_prevalence(fecal_data, fecal_metadata)
-
+# Calculate teh representation of unique ARGs throughout the samples
 arg_hit_prevalence <- calculate_arg_hit_prevalence(fecal_data, fecal_metadata) 
-
+# Calculate the non-plasmid/non-ARG hit prevalence per sample
 non_plasmid_hit_prevalence <- calculate_non_plasmid_hit_prevalence(fecal_data, fecal_metadata)
-
+# Calculate fractions of hits
 frac_df_fecal <- calculate_fraction_hits(hits_per_fecal_sample, plasmid_hit_prevalence, non_plasmid_hit_prevalence, arg_hit_prevalence, fecal_metadata)
+# Get isoform stats
 isoform_stats_fecal <- calculate_isoform_statistics(fecal_data)
+# Add the post-enrichment DNA to the frac_df
 frac_df_fecal <- add_dna_data(frac_df_fecal, fecal_dna_values)
+# Plot the plasmid fractions of ARGs/plasmids for each sample
 plot_plasmid_fraction(frac_df_fecal, fecal = T)
-
-
+# Plot the representation of ARGs/plasmids for each sample
 unique_fecal <- calculate_plasmid_coverage(plasmid_hit_prevalence, non_plasmid_hit_prevalence, arg_hit_prevalence, frac_df_fecal, fecal_sample_data, hits_per_fecal_sample, fecal = T) 
 
 
 
 #----------------#
-# Spike-In Data
+# CALCULATIONS FOR Spike-In Data
 #----------------#
+# Get samples
 spike_in_data <- all_samples %>% filter(sample_type == "spike_in")
+# Get metadata
 spike_in_metadata <- all_sample_data %>% filter(sample_type == "spike_in")
+# Get post-enrichment DNA concentrations
 spike_in_dna_values <- c(2.48, 5.22, 1.44, 1.2, 0.8, 0.61, 0.376)
-
+# Get hits per sample
 hits_per_spike_sample <- calculate_hits_per_sample(spike_in_data, spike_in_metadata)
+# Get unique hits per samples
 unique_hits_spike <- calculate_unique_hits(spike_in_data, spike_in_metadata)
+# Get plasmid hits per sample
 plasmid_hit_prevalence_spike <- calculate_plasmid_hit_prevalence(spike_in_data, spike_in_metadata)
-
+# Get ARG hits per sample
 arg_hit_prevalence <- calculate_arg_hit_prevalence(spike_in_data, spike_in_metadata) 
-
+# Get non-plasmid/non-ARG hits per sample
 non_plasmid_hit_prevalence_spike <- calculate_non_plasmid_hit_prevalence(spike_in_data, spike_in_metadata)
+# Calculate fraction of ARG-hits and plasmid-hits
 frac_df_spike_in <- calculate_fraction_hits(hits_per_spike_sample, plasmid_hit_prevalence_spike, non_plasmid_hit_prevalence_spike, arg_hit_prevalence, spike_in_metadata)
+# Get isoform stats
 isoform_stats_spike <- calculate_isoform_statistics(spike_in_data)
+# Add post-enrichment DNA to frac-df
 frac_df_spike_in <- add_dna_data(frac_df_spike_in, spike_in_dna_values)
+# Plot fractions of ARG/plasmd hits per sample
 plot_plasmid_fraction(frac_df_spike_in)
-
-
+# Plot the representation of unique ARGs/plasmids per sample.
 unique_spike <- calculate_plasmid_coverage(plasmid_hit_prevalence_spike, non_plasmid_hit_prevalence_spike, arg_hit_prevalence, frac_df_spike_in, spike_in_sample_data, hits_per_spike_sample, fecal = F) 
 
 
