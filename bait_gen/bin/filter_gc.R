@@ -10,12 +10,13 @@ args <- commandArgs(trailingOnly = TRUE)
 data <- args[1]
 mm <- as.character(args[2])
 
+# Get fastas
 fasta_file <- readDNAStringSet(data, format = "fasta")
 
 fasta_file <- as.data.frame(fasta_file)
 fasta_file <- rownames_to_column(fasta_file, var = "probe_name")
 
-# Assuming fasta_file is your data frame
+# Get nucleotide freqs
 fasta_file <- fasta_file %>%
   mutate(
     A = str_count(x, "A"),
@@ -28,7 +29,7 @@ fasta_file <- fasta_file %>%
     source = "Unfiltered_data"
   )
 
-# Filter probes based on GC content
+# Filter 35%<GC<75%
 good_probes <- fasta_file %>%
   filter(GC >= 0.35 & GC <= 0.75)
 
@@ -45,6 +46,7 @@ long_plot_df <- pivot_longer(plot_df, cols = c("GC", "Tm"), names_to = "Metric",
 
 sample <- long_plot_df %>% sample_n(100)
 
+# plot filtered vs unfiltered probes
 q <- ggplot(long_plot_df, aes(x = source, y = Value, fill = source)) +
   geom_boxplot() +
   labs(title = "Boxplot of GC and Tm", x = "Metric", y = "Value") +
@@ -55,6 +57,7 @@ file_path <- paste("/home/abergm/bait_gen/outputs/plots/", mm, "_GC_Tm_filter_pl
 
 print(file_path)
 
+# save plot
 ggsave(file_path, q, create.dir = TRUE)
 
 print(paste(probes_out_of_bounds, "probes were filtered away from the original", 
@@ -62,6 +65,7 @@ print(paste(probes_out_of_bounds, "probes were filtered away from the original",
 
 print("The probes have been filtered based on GC%. GC% is between 35% and 75%.")
 
+#Print stats to console
 output_text <- paste(
   "Number of probes before filtering:", nrow(fasta_file), "\n",
   "Number of probes after filtering:", nrow(good_probes), "\n",
