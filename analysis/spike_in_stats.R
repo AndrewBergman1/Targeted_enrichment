@@ -1,8 +1,10 @@
 library(tidyverse)
 library(RColorBrewer)
 
+# WD
 downloads <- "C:/Users/abergm/Downloads/"
 
+# Sample names
 samples <- c("25ng_unenriched_S1_kraken2_fastp_0.1.report",
           "25ng_VERO_E6_enriched_S8_kraken2_fastp_0.1.report",
           "10ng_enriched_S2_kraken2_fastp_0.1.report",
@@ -12,24 +14,7 @@ samples <- c("25ng_unenriched_S1_kraken2_fastp_0.1.report",
           "2.5e-2ng_enriched_S7_kraken2_fastp_0.1.report",
           "10e-2ng_enriched_S5_kraken2_fastp_0.1.report")
 
-fecal <- c("6323_1x_S89_kraken2_fastp_0.1.report",
-             "6323_1x_S96_kraken2_fastp_0.1.report",
-             "6323_10e-1_S90_kraken2_fastp_0.1.report",
-             "6323_10e-2_S91_kraken2_fastp_0.1.report",
-             "6323_10e-3_S92_kraken2_fastp_0.1.report",
-             "6323_10e-4_S93_kraken2_fastp_0.1.report",
-             "6323_10e-5_S94_kraken2_fastp_0.1.report",
-             "6323_10e-6_S95_kraken2_fastp_0.1.report")
-
-temp <- c("1x",
-                  "1x(2)",
-                  "10e-1",
-                  "10e-2",
-                  "10e-3",
-                  "10e-4",
-                  "10e-5",
-                  "10e-6")
-
+# sample names
 sample_names <- c("25ng",
           "25ng_control",
           "10ng",
@@ -39,6 +24,7 @@ sample_names <- c("25ng",
           "0.025ng",
           "0.01ng")
 
+# Read sample files
 read_and_process <- function(file, sample_name) {
   df <- read.table(paste0(downloads, file),
                    sep = "\t",
@@ -52,37 +38,29 @@ read_and_process <- function(file, sample_name) {
     mutate(sample = sample_name)
   
   return(df)
-}# Define the plotting function
+}
+# Define the plotting function
 plot <- function(all_data, plot_dir) {
   
-  # Define the ranks you want to plot:
-  # D = domain, K = kingdom, P = phylum, C = class, O = order, F = family, G = genus, S = species
+  # Define the ranks for plotting
   ranks_to_plot <- c("D","K","P","C","O","F","G","S")
   
-  # Create a directory for plots if it doesn't exist
+  # Create a directory for plots
   dir.create(plot_dir, showWarnings = FALSE)
   
-  # Define the desired order of samples
+  # Sample order
   desired_order <- c("25ng_control", "25ng", "10ng", "1ng", 
                      "0.1ng", "0.05ng", "0.025ng", "0.01ng")
   
-  # Define a color palette for publication-ready colors
-  # Option 1: Using RColorBrewer's "Paired" palette (12 colors)
-  # Option 2: Using RColorBrewer's "Set3" palette (12 colors)
-  # Option 3: Using viridis package (requires installation)
-  
-  # Here, we'll use "Paired" for its distinct colors for phylum rank
+
+  #define colors
   phylum_num_colors <- 11  # Top 10 phyla + Others
   phylum_palette_name <- "Paired"
   
-  # Check if the palette has enough colors
-  if (phylum_num_colors > brewer.pal.info[phylum_palette_name, "maxcolors"]) {
-    stop(paste("Palette", phylum_palette_name, "does not have enough colors."))
-  }
-  
   # Get the colors from the palette for phylum rank
   phylum_colors <- brewer.pal(n = phylum_num_colors, name = phylum_palette_name)
-  
+
+  # plot all levels of classification
   for (rank in ranks_to_plot) {
     # Filter data for the current rank
     rank_df <- all_data %>%
@@ -93,9 +71,8 @@ plot <- function(all_data, plot_dir) {
       next
     }
     
-    # *** Begin Modification: Grouping Top 10 Phyla and Others ***
     if (rank == "P") {
-      # Determine the top 10 phyla based on total reads across all samples
+      # Determine the top 10 phyla 
       top10_phyla <- rank_df %>%
         group_by(name) %>%
         summarize(total_reads = sum(reads_clade), .groups = 'drop') %>%
@@ -107,22 +84,14 @@ plot <- function(all_data, plot_dir) {
       rank_df <- rank_df %>%
         mutate(name = ifelse(name %in% top10_phyla, name, "Others"))
       
-      # Reorder 'name' factor to have top 10 phyla first, then "Others"
       rank_df$name <- factor(rank_df$name, levels = c(top10_phyla, "Others"))
       
       # Assign colors for phyla
       fill_scale <- scale_fill_manual(values = phylum_colors)
       
     } else {
-      # For other ranks, use a different color palette
-      # Option 1: Automatically assign colors
-      # Option 2: Use a predefined palette with enough colors
-      
-      # Determine the number of unique categories in 'name'
       num_categories <- length(unique(rank_df$name))
       
-      # Choose a palette based on the number of categories
-      # Here, we'll use "Set3" palette which has up to 12 colors
       other_palette_name <- "Set3"
       
       # If number of categories exceeds the palette, use a larger palette or repeat colors
@@ -135,16 +104,9 @@ plot <- function(all_data, plot_dir) {
       
       # Assign colors
       fill_scale <- scale_fill_manual(values = other_colors)
-      
-      # Alternatively, you can use a continuous palette or another discrete palette
-      # Example using viridis:
-      # library(viridis)
-      # fill_scale <- scale_fill_viridis_d(option = "D", begin = 0.1, end = 0.9)
     }
-    # *** End Modification ***
     
-    # Compute total reads for this rank per sample
-    # Normalize by the sum of reads_clade at this rank
+    # Calculate total reads for this rank per sample
     rank_totals <- rank_df %>%
       group_by(sample) %>%
       summarize(total_rank_reads = sum(reads_clade), .groups = 'drop')
@@ -156,68 +118,65 @@ plot <- function(all_data, plot_dir) {
     # Convert 'sample' to a factor with the specified order
     rank_df$sample <- factor(rank_df$sample, levels = desired_order)
     
-    # Create the ggplot with publication-ready colors
+    # Plot classifications
     p <- ggplot(rank_df, aes(x = sample, y = fraction, fill = name)) +
       geom_col(position = "stack") +
-      theme_minimal(base_size = 14) +  # Increase base font size for readability
-      fill_scale +  # Apply the defined color palette based on rank
-      guides(fill = guide_legend(ncol = 2, title = ifelse(rank == "P", "Phylum", rank))) +  # Customize legend
+      theme_minimal(base_size = 14) +  
+      fill_scale +  
+      guides(fill = guide_legend(ncol = 2, title = ifelse(rank == "P", "Phylum", rank))) +
       theme(
-        legend.text = element_text(size = 10),            # Adjust legend text size
-        legend.title = element_text(size = 12, face = "bold"),  # Legend title styling
-        legend.key.size = unit(0.8, "lines"),             # Increase legend key size
-        legend.spacing.x = unit(0.4, "cm"),               # Adjust horizontal spacing in legend
-        axis.text.x = element_text(angle = 45, hjust = 1),# Tilt x-axis labels for readability
-        axis.title = element_text(size = 14, face = "bold"),# Axis titles styling
-        plot.title = element_text(size = 16, face = "bold", hjust = 0.5) # Plot title styling
+        legend.text = element_text(size = 10),          
+        legend.title = element_text(size = 12, face = "bold"), 
+        legend.key.size = unit(0.8, "lines"),            
+        legend.spacing.x = unit(0.4, "cm"),               
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5) 
       ) +
       labs(
         title = ifelse(rank == "P", "Distribution of Top 10 Phyla and Others", paste("Distribution of", rank, "Ranks")),
         x = "Sample",
         y = "Fraction of Reads"
       )
-    
-    # Display the plot
     print(p)
     
-    # Save the plot as a high-resolution PNG
+    # Save the plot
     outfile <- file.path(plot_dir, paste0("plot_", rank, ".png"))
     ggsave(outfile, p, width = 12, height = 8, dpi = 300)
   }
 }
 # Convert sample names into numeric dilution factors.
-# For example: "1x" -> 1; "10e-1" -> 0.1, "10e-2" -> 0.01, etc.
-# We can write a small function to parse these:
 parse_dilution <- function(x) {
   # Remove "_control" suffix if present
   x <- gsub("_control", "", x)
   
-  # Convert units like "25ng" to numeric values (25, 10, 1, etc.)
   as.numeric(gsub("ng", "", x))
 }
 
-
+# plot the fold change of microbes throughotu the samples
 plot_enrichment <- function(all_data, plot_dir) {
-  
+
+  # remove whitespaces
   all_data <- all_data %>%
     mutate(name = trimws(name)) %>%
     mutate(dilution = parse_dilution(sample))  # Use the updated parser
   
-  # Focus on phylum-level data
+  # Focus on phylum-level 
   phylum_data <- all_data %>%
     filter(rank_code == "P")
   
-  # Compute total phylum reads per sample and fractions
+  # Compute total phylum reads per sampel
   phylum_totals <- phylum_data %>%
     group_by(sample) %>%
     summarize(total_phylum_reads = sum(reads_clade))
-  
+
+  # get fracs of each phyla
   phylum_data <- phylum_data %>%
     left_join(phylum_totals, by = "sample") %>%
     mutate(fraction = reads_clade / total_phylum_reads)
   
-  # Identify baseline (control) sample fractions
-  baseline_sample <- "25ng_control"  # Adjust this if your control sample changes
+  # Identify baseline
+  baseline_sample <- "25ng_control"  
   one_x_data <- phylum_data %>% filter(sample == baseline_sample)
   
   # Calculate mean fractions for the baseline sample
@@ -226,8 +185,9 @@ plot_enrichment <- function(all_data, plot_dir) {
     summarize(mean_1x_fraction = mean(fraction, na.rm = TRUE)) %>%
     ungroup()
   
-  default_baseline_value <- 1e-3
-  
+  default_baseline_value <- 1e-3 # to calculate fold change of phyla absent in ctrl
+
+  # calculate fodl change
   phylum_data <- phylum_data %>%
     left_join(one_x_fractions, by = "name") %>%
     mutate(
@@ -247,7 +207,6 @@ plot_enrichment <- function(all_data, plot_dir) {
     select(name, sample, dilution, fraction, mean_1x_fraction, fold_change) %>%
     arrange(dilution, desc(fold_change))
   
-  # Print the fold change table
   print(fold_change_table)
   
   fold_change_table <- fold_change_table %>%
@@ -255,7 +214,8 @@ plot_enrichment <- function(all_data, plot_dir) {
   
   dilutions <- unique(fold_change_table$dilution)
   plots <- list()
-  
+
+  # plot fold change for all samples
   for (this_dilution in dilutions) {
     # Filter and arrange data for the current dilution
     sample_data <- fold_change_table %>% 
@@ -279,44 +239,42 @@ plot_enrichment <- function(all_data, plot_dir) {
       ) +
       ggtitle(plot_title)
     
-    # Append the plot to the list
     plots[[length(plots) + 1]] <- p
-    
+
+    # save file
     ggsave(filename = paste0(plot_dir, "plot_dilution_", this_dilution, ".png"), plot = p, width = 8, height = 6)
   }
   
   return(fold_change_table)
 }
 
+# find common enrihcments throughout the sampels
 find_common_enrichments <- function(fold_change_table, plot_dir) {
-  
-  # Step 1: Calculate average enrichment per sample
+
+  # Get average enrichment per sample
   average_enrichment <- fold_change_table %>%
     group_by(sample) %>%
     summarize(mean_enrichment = mean(fold_change, na.rm = TRUE)) %>%
     arrange(desc(mean_enrichment))  # Sort by highest enrichment
   
-  # Print the average enrichment table
   print(average_enrichment)
-  
-  # Step 2: Filter for enriched microorganisms (fold change > 1)
+
+  # get fold change > 1 
   enriched_data <- fold_change_table %>%
     filter(fold_change > 1) %>%
     select(name, sample)  # Retain microorganism names and samples
   
-  # Print enriched data
   print(enriched_data)
-  
-  # Step 3: Calculate overlaps between microorganisms
+
+  # Fnid overlapping microbes
   overlap_table <- enriched_data %>%
     group_by(name) %>%
     summarize(num_samples = n(), samples = paste(unique(sample), collapse = ", ")) %>%
     arrange(desc(num_samples))  # Sort by the number of samples
   
-  # Print overlap table
   print(overlap_table)
   
-  # Step 4: Optional Visualization (Bar Plot of Overlaps)
+  # plot overlaps
   ggplot(overlap_table, aes(x = reorder(name, -num_samples), y = num_samples)) +
     geom_col() +
     labs(
@@ -330,12 +288,13 @@ find_common_enrichments <- function(fold_change_table, plot_dir) {
   
   return(overlap_table)
 }
+# See how common phyla differs among the samples
 assess_diffs_between_common_phyla <- function(fold_change_table) {
   interesting_phyla <- fold_change_table %>% 
     filter(name %in% c("Chordata")) %>% 
     mutate(name = as.factor(name))
-  
-  # Create the plot
+
+  # plot "interesting" phyla
   p <- ggplot(interesting_phyla, aes(x = sample, y = fold_change, fill = name)) +
     geom_col(position = "stack") +
     facet_wrap(~name, scales = "free") +
@@ -350,7 +309,6 @@ assess_diffs_between_common_phyla <- function(fold_change_table) {
           legend.title = element_text(size = 10),
           legend.text = element_text(size = 8))
   
-  # Display the plot
   print(p)
   ggsave(filename= paste0(plot_dir, "interesting_phyla.png"), width = 10, height = 6)
   
@@ -360,9 +318,10 @@ assess_diffs_between_common_phyla <- function(fold_change_table) {
 # Define the output directory
 plot_dir <- "C:/Users/abergm/Downloads/hierarchy_plots/"
 
-# Process the data and create the plots
+# Process the data
 all_data <- map2_dfr(samples, sample_names, read_and_process)
 
+# plot data
 plot(all_data, plot_dir)
 
 # Generate fold change plots
