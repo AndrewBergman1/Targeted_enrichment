@@ -14,8 +14,8 @@ This thesis covers two master's degrees, one in molecular genetics and biotechno
 
 **Bioinformatic processing**: Bioinformatic assessment of targeted enrichment. The code for assembly, classification and alignments are be fond in the Snakefile at ~/analysis/*.snakefile. 
 
-	a) Assembly of reads into contigs using Trinity.
-	b) Classification of contigs using Kraken2.
-	c) Alignment of reads to NT using BLAST. Code for plots are found in ~/analysis/*.R
+	a) Assembly of reads into contigs using Trinity (~/analysis/trinity.snakefile).
+	b) Classification of contigs using Kraken2 (~/analysis/kraken2.snakefile).
+	c) Alignment of reads to NT using BLAST (~/analysis/megablast.snakefile).
 
- Plotting code is found in ~/analysis/*.R
+ **Coverage/Classification assessment**: The Kraken2 classifications were assessed using ~/analysis/enrichment_analysis.R. The code takes kraken2 report files as input files and plots all levels of classification. Plasmid/ARG coverage was calculated using ~/analysis/fecal_stats.R and ~/analysis/spike_in_stats.R for sample set A and B, respectively. The blast-formated alignment files are used as input. 
